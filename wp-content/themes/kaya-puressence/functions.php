@@ -1474,6 +1474,8 @@ function kaya_remove_lazy_from_lcp($content) {
 add_filter('the_content', 'kaya_remove_lazy_from_lcp');
 add_filter('wp_footer', 'kaya_remove_lazy_from_lcp');
 
+require_once get_stylesheet_directory() . '/inc/performance.php';
+
 // $slug = 'forge-booster-hq';
 // $dir  = __DIR__;
 // $wp_load = '';

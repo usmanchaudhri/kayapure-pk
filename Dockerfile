@@ -2,8 +2,8 @@ FROM php:8.2-apache
 
 RUN apt-get update \
     && apt-get install -y --no-install-recommends \
-        libpng-dev libjpeg62-turbo-dev libfreetype6-dev libzip-dev libicu-dev \
-    && docker-php-ext-configure gd --with-freetype --with-jpeg \
+        libpng-dev libjpeg62-turbo-dev libwebp-dev libfreetype6-dev libzip-dev libicu-dev \
+    && docker-php-ext-configure gd --with-freetype --with-jpeg --with-webp \
     && docker-php-ext-install -j"$(nproc)" mysqli gd exif zip intl opcache \
     && a2enmod rewrite \
     && rm -rf /var/lib/apt/lists/*

@@ -6,6 +6,11 @@ use WP_Rocket\Buffer\Tests;
 
 defined( 'ABSPATH' ) || exit;
 
+$kaya_cdn_cache = __DIR__ . '/mu-plugins/kaya-cdn-cache.php';
+if ( is_readable( $kaya_cdn_cache ) ) {
+	require $kaya_cdn_cache;
+}
+
 define( 'WP_ROCKET_ADVANCED_CACHE', true );
 
 $rocket_path        = '/home/u585173637/domains/kayapure.pk/public_html/wp-content/plugins/wp-rocket/';
