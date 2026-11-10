@@ -1,0 +1,11 @@
+.env
+.local/
+wp-config.php
+wp-content/uploads/
+
+# Database dumps. The live database stays on Hostinger.
+*.sql
+*.sql.gz
+*.sql.zip
+*.wpress
+dbdata/

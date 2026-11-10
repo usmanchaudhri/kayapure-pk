@@ -1,0 +1,319 @@
+<?php
+
+/**
+ * Fetch Info API Route
+ *
+ * This file is responsible for fetching plugin or theme information from both WordPress.org 
+ * and local premium assets.
+ * 
+ * @package WpRollback\SharedCore\RestAPI
+ */
+
+declare(strict_types=1);
+
+namespace WpRollback\SharedCore\RestAPI;
+
+use WP_REST_Request;
+use WP_REST_Response;
+use WpRollback\SharedCore\Core\Contracts\ApiRouteV1;
+use WpRollback\SharedCore\Core\Exceptions\Primitives\Exception;
+use WpRollback\SharedCore\Core\SharedCore;
+use WpRollback\SharedCore\Rollbacks\DTO\RollbackItemDTO;
+use WpRollback\SharedCore\Rollbacks\Services\BackupService;
+use WpRollback\SharedCore\Rollbacks\Traits\PluginHelpers;
+use WpRollback\SharedCore\Core\Utilities\PluginUtility;
+
+/**
+ * Class FetchInfoApiRoute
+ *
+ */
+class FetchInfoApiRoute extends ApiRouteV1
+{
+    use PluginHelpers;
+
+    /**
+     * @unreleased
+     */
+    public function register(): void
+    {
+        register_rest_route(
+            $this->namespace,
+            '/fetch-info/',
+            [
+                'methods' => 'GET',
+                'callback' => [$this, 'processRequest'],
+                'permission_callback' => [$this, 'permissionValidation'],
+                'args' => [
+                    'type' => [
+                        'required' => true,
+                        'type' => 'string',
+                        'enum' => ['plugin', 'theme'],
+                    ],
+                    'slug' => [
+                        'required' => true,
+                        'type' => 'string',
+                    ],
+                ],
+            ]
+        );
+    }
+
+    /**
+     * @inheritdoc
+     */
+    public function permissionValidation(WP_REST_Request $request)
+    {
+        $parentCheck = parent::permissionValidation($request);
+        if (is_wp_error($parentCheck)) {
+            return $parentCheck;
+        }
+
+        if (!$parentCheck) {
+            return false;
+        }
+
+        $type = $request->get_param('type');
+
+        return PluginUtility::currentUserCanRollback(is_string($type) ? $type : null);
+    }
+
+    /**
+     * Process the API request
+     *
+     * @param WP_REST_Request $request
+     * @return WP_REST_Response
+     * @throws Exception
+     */
+    public function processRequest(WP_REST_Request $request): WP_REST_Response
+    {
+        $slug = $request->get_param('slug');
+        $type = $request->get_param('type');
+
+        // Get current installation data first
+        $currentData = $this->getCurrentInstallationData($slug, $type);
+
+        // If we can't get current installation data, return error
+        if (empty($currentData) || empty($currentData['name'])) {
+            return new WP_REST_Response([
+                'success' => false,
+                'message' => 'Could not find installed ' . esc_html($type) . '.',
+                'code' => 'asset_not_found',
+            ], 404);
+        }
+
+        // Get repository data
+        $data = $this->getRepositoryData($slug, $type);
+
+        try {
+            if ($data) {
+                // Handle WordPress.org asset
+                return $this->handleWpOrgAsset($data, $currentData, $type);
+            } else {
+                // Handle premium asset
+                return $this->handlePremiumAsset($currentData, $type, $slug);
+            }
+        } catch (Exception $e) {
+            return new WP_REST_Response([
+                'success' => false,
+                'message' => $e->getMessage(),
+                'code' => 'processing_failed',
+            ], 400);
+        }
+    }
+
+    /**
+     * Handle WordPress.org asset data
+     *
+     * @param object $data Repository data
+     * @param array $currentData Current installation data
+     * @param string $type Asset type
+     * @return WP_REST_Response
+     * @throws Exception
+     */
+    private function handleWpOrgAsset(object $data, array $currentData, string $type): WP_REST_Response
+    {
+        // Create DTO from WordPress.org data
+        $dto = RollbackItemDTO::fromWpOrg($data, $currentData['current_version'] ?? '');
+
+        return rest_ensure_response([
+            'success' => true,
+            'data' => $dto->toArray()
+        ]);
+    }
+
+    /**
+     * Handle premium asset data
+     *
+     * @param array $currentData Current installation data
+     * @param string $type Asset type
+     * @param string $slug Asset slug
+     * @return WP_REST_Response
+     * @throws Exception
+     */
+    private function handlePremiumAsset(array $currentData, string $type, string $slug): WP_REST_Response
+    {
+        // Get available versions from backup directory
+        $versions = $this->getAvailableVersions($slug);
+
+        /**
+         * Filters the available versions for a premium asset before display.
+         *
+         *
+         * @param array  $versions Associative array of version => version data.
+         * @param string $slug     The asset slug.
+         * @param string $type     The asset type ('plugin' or 'theme').
+         */
+        $versions = apply_filters('wpr_premium_asset_versions', $versions, $slug, $type);
+
+        // Add current version if not in versions array
+        $currentVersion = $currentData['current_version'];
+        if (!isset($versions[$currentVersion])) {
+            $versions[$currentVersion] = [
+                'file' => $currentData['plugin'] ?? $currentData['stylesheet'] ?? '',
+                'downloadUrl' => '',
+                'released' => null,
+            ];
+        }
+
+        // Add versions to current data
+        $currentData['versions'] = $versions;
+        $currentData['isPro'] = true;
+
+        // Create DTO from premium data
+        $dto = RollbackItemDTO::fromPremium($currentData, $currentVersion, $slug);
+        
+        return rest_ensure_response([
+            'success' => true,
+            'data' => $dto->toArray()
+        ]);
+    }
+
+    /**
+     * Get available versions from backup directory.
+     *
+     * @param string $slug Asset slug
+     * @return array<string, array{file: string, downloadUrl: string, released: ?int}>
+     */
+    private function getAvailableVersions(string $slug): array
+    {
+        $backupService = SharedCore::container()->make(BackupService::class);
+
+        $versions = [];
+        foreach ($backupService->getArchivesForSlug($slug) as $file => $version) {
+            $versions[$version] = [
+                'file' => basename($file),
+                'downloadUrl' => '', // Premium plugins/themes don't have public download URLs
+                'released' => null,
+                'source' => 'local',
+            ];
+        }
+
+        return $versions;
+    }
+
+    /**
+     * Get current installation data
+     *
+     * @param string $slug
+     * @param string $type
+     * @return array
+     */
+    private function getCurrentInstallationData(string $slug, string $type): array
+    {
+        $data = [];
+
+        if ('plugin' === $type) {
+            if (!function_exists('get_plugins')) {
+                require_once ABSPATH . 'wp-admin/includes/plugin.php';
+            }
+
+            $allPlugins = get_plugins();
+            foreach ($allPlugins as $file => $pluginData) {
+                // Match either the directory name (typical case) or the
+                // canonical wp.org slug from WP core's update transient
+                // (covers plugins whose directories were renamed locally).
+                $dirSlug = dirname((string) $file);
+                $canonicalSlug = $this->resolveWpOrgSlug((string) $file);
+                if ($dirSlug === $slug || $canonicalSlug === $slug) {
+                    $data = [
+                        'plugin' => $file,
+                        'current_version' => $pluginData['Version'],
+                        'name' => $pluginData['Name'],
+                        'author' => wp_strip_all_tags($pluginData['Author']),
+                        'description' => $pluginData['Description'],
+                        'type' => 'plugin',
+                        'slug' => $slug,
+                        'versions' => [], // Will be populated later with WP.org or premium versions
+                        'pluginURI' => $pluginData['PluginURI'] ?? null,
+                        'authorURI' => $pluginData['AuthorURI'] ?? null,
+                        'requiresWP' => $pluginData['RequiresWP'] ?? null,
+                        'requiresPHP' => $pluginData['RequiresPHP'] ?? null,
+                    ];
+                    break;
+                }
+            }
+        } else {
+            $theme = wp_get_theme($slug);
+            if ($theme->exists()) {
+                $data = [
+                    'current_version' => $theme->get('Version'),
+                    'stylesheet' => $theme->get_stylesheet(),
+                    'name' => $theme->get('Name'),
+                    'author' => wp_strip_all_tags($theme->get('Author')),
+                    'description' => $theme->get('Description'),
+                    'type' => 'theme',
+                    'slug' => $slug,
+                    'versions' => [], // Will be populated later with WP.org or premium versions
+                    'themeURI' => $theme->get('ThemeURI'),
+                    'authorURI' => $theme->get('AuthorURI'),
+                    'requiresWP' => $theme->get('RequiresWP'),
+                    'requiresPHP' => $theme->get('RequiresPHP'),
+                    // Premium themes aren't on WordPress.org, so show the screenshot they ship with.
+                    'screenshotUrl' => $theme->get_screenshot() ?: null,
+                ];
+            }
+        }
+
+        return $data;
+    }
+
+    /**
+     * Fetch data from WordPress.org repository
+     *
+     * @param string $slug
+     * @param string $type
+     *
+     * @return object|false
+     * @throws Exception
+     */
+    private function getRepositoryData(string $slug, string $type)
+    {
+        $wpOrgApiURL = 'theme' === $type
+            ? 'https://api.wordpress.org/themes/info/1.2'
+            : 'https://api.wordpress.org/plugins/info/1.2';
+
+        $url = add_query_arg(
+            [
+                'action' => "{$type}_information",
+                'request[slug]' => $slug,
+                'request[fields][versions]' => '1'
+            ],
+            $wpOrgApiURL
+        );
+
+        $response = wp_remote_get($url);
+        if (is_wp_error($response)) {
+            return false;
+        }
+
+        $body = wp_remote_retrieve_body($response);
+        $data = json_decode($body);
+
+        // WordPress.org returns either false or an error object when plugin/theme is not found
+        if (empty($data) || isset($data->error)) {
+            return false;
+        }
+
+        return $data;
+    }
+} 

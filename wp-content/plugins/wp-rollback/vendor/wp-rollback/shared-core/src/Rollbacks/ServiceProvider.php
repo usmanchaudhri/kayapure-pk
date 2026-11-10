@@ -1,0 +1,209 @@
+<?php
+
+/**
+ * Shared Rollback Service Provider
+ *
+ * This service provider handles common rollback-related service registrations
+ * that are shared between the free and pro plugins.
+ *
+ * @package WpRollback\SharedCore\Rollbacks
+ */
+
+declare(strict_types=1);
+
+namespace WpRollback\SharedCore\Rollbacks;
+
+use WpRollback\SharedCore\Core\BaseConstants;
+use WpRollback\SharedCore\Core\Exceptions\BindingResolutionException;
+use WpRollback\SharedCore\Core\Contracts\ServiceProvider as ServiceProviderContract;
+use WpRollback\SharedCore\Core\Hooks;
+use WpRollback\SharedCore\Core\SharedCore;
+use WpRollback\SharedCore\Rollbacks\Registry\RollbackStepRegisterer;
+use WpRollback\SharedCore\Rollbacks\RollbackSteps\MaintenanceMode;
+use WpRollback\SharedCore\Rollbacks\RollbackSteps\BackupAsset;
+use WpRollback\SharedCore\Rollbacks\RollbackSteps\ValidatePackage;
+use WpRollback\SharedCore\Rollbacks\RollbackSteps\Cleanup;
+use WpRollback\SharedCore\Rollbacks\Services\PackageValidationService;
+use WpRollback\SharedCore\Rollbacks\Services\BackupService;
+use WpRollback\SharedCore\Rollbacks\Services\MaintenanceService;
+use WpRollback\SharedCore\Rollbacks\Services\NetworkAssetUsageService;
+use WpRollback\SharedCore\Rollbacks\Services\WpOrgAssets;
+use WpRollback\SharedCore\Rollbacks\ToolsPage\ToolsPage;
+
+/**
+ * Class ServiceProvider
+ *
+ */
+class ServiceProvider implements ServiceProviderContract
+{
+    /**
+     * @inheritdoc
+     * @throws BindingResolutionException
+     */
+    public function register(): void
+    {
+        // Register ToolsPage - shared between free and pro
+        SharedCore::container()->singleton(ToolsPage::class);
+
+        // Register MaintenanceService
+        SharedCore::container()->singleton(MaintenanceService::class);
+
+        // Shared so WordPress's update data is only walked once per request
+        SharedCore::container()->singleton(WpOrgAssets::class);
+
+        // Register NetworkAssetUsageService with the running WP Rollback plugin's file
+        SharedCore::container()->singleton(NetworkAssetUsageService::class, function ($container) {
+            return new NetworkAssetUsageService($container->make(BaseConstants::class)->getBasename());
+        });
+
+        // Register MaintenanceMode step with MaintenanceService and NetworkAssetUsageService dependencies
+        // This step enables maintenance mode at the beginning of rollback
+        SharedCore::container()->singleton(MaintenanceMode::class, function ($container) {
+            return new MaintenanceMode(
+                $container->make(MaintenanceService::class),
+                $container->make(NetworkAssetUsageService::class)
+            );
+        });
+
+        // Register ValidatePackage step with PackageValidationService dependency
+        // This is identical in both free and pro plugins
+        SharedCore::container()->singleton(ValidatePackage::class, function ($container) {
+            return new ValidatePackage($container->make(PackageValidationService::class));
+        });
+
+        // Register BackupAsset step with BackupService dependency
+        // This is identical in both free and pro plugins
+        SharedCore::container()->singleton(BackupAsset::class, function ($container) {
+            return new BackupAsset($container->make(BackupService::class));
+        });
+
+        // Register Cleanup step with MaintenanceService and BackupService dependencies
+        // This step ensures maintenance mode is always disabled
+        SharedCore::container()->singleton(Cleanup::class, function ($container) {
+            return new Cleanup(
+                $container->make(MaintenanceService::class),
+                $container->make(BackupService::class)
+            );
+        });
+
+        // Register base RollbackStepRegisterer only if not already registered
+        // This allows plugins to customize while providing a sensible default
+        if (!SharedCore::container()->has(RollbackStepRegisterer::class)) {            
+            SharedCore::container()->singleton(RollbackStepRegisterer::class, function () {
+                $registerer = new RollbackStepRegisterer();
+                // Register base steps and add ValidatePackage (pro feature)
+                $registerer->register(RollbackStepRegisterer::getBaseSteps());
+                $registerer->registerAfter(ValidatePackage::class, BackupAsset::class);
+                return $registerer;
+            });
+        } 
+    }
+
+    /**
+     * @inheritdoc
+     */
+    public function boot(): void
+    {
+        // Initialize maintenance service to handle maintenance mode checks
+        try {
+            $maintenanceService = SharedCore::container()->make(MaintenanceService::class);
+            $maintenanceService->init();
+        } catch (\Exception $e) {
+            // Log error but continue
+            if (defined('WP_DEBUG') && WP_DEBUG) {
+                // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log
+                error_log(sprintf('[WP Rollback Shared] Failed to initialize maintenance service: %s', $e->getMessage()));
+            }
+        }
+
+        // Don't set up the backup folder here: this runs on every request, front end
+        // included. createAssetBackup() sets it up before writing a backup.
+        $this->registerBackupHooks(SharedCore::container()->make(BackupService::class));
+
+        // Read the update data again after WordPress saves or deletes it.
+        foreach (['update_plugins', 'update_themes'] as $transient) {
+            add_action("set_site_transient_{$transient}", [WpOrgAssets::class, 'flushShared'], 10, 0);
+            add_action("delete_site_transient_{$transient}", [WpOrgAssets::class, 'flushShared'], 10, 0);
+        }
+    }
+
+    /**
+     * Register WordPress hooks for backup functionality.
+     * These hooks are shared between free and pro plugins.
+     *
+     * @param BackupService $backupService The backup service instance
+     */
+    private function registerBackupHooks(BackupService $backupService): void
+    {
+        // Register the critical upgrader hook that intercepts WordPress updates
+        add_filter('upgrader_package_options', function($options) use ($backupService) {
+            return $backupService->interceptUpgrade($options);
+        }, 10, 1);
+        
+        // Register hook to check if asset has backup versions
+        add_filter('wpr_is_pro_rollback', function($isPro, $slug) use ($backupService) {
+            return $backupService->hasBackupVersions($isPro, $slug);
+        }, 10, 2);
+        
+        // Register hook to get available backup versions
+        add_filter('wpr_get_pro_versions', function($versions, $slug) use ($backupService) {
+            return $backupService->getAvailableVersions($versions, $slug);
+        }, 10, 2);
+        
+        // Multisite: Register filters for rollback operations
+        if (is_multisite()) {
+            Hooks::addFilter('upload_mimes', self::class, 'filterUploadMimes', 10, 1);
+            Hooks::addFilter('pre_site_option_upload_filetypes', self::class, 'filterUploadFileTypes', 10, 1);
+            Hooks::addFilter('upload_size_limit', self::class, 'filterUploadSizeLimit', 999, 1);
+        }
+    }
+    
+    /**
+     * Filter upload MIME types to allow ZIP files during rollback operations.
+     *
+     * @param array $mimes Array of allowed MIME types.
+     * @return array Modified array of allowed MIME types.
+     */
+    public static function filterUploadMimes($mimes): array
+    {
+        // Only add ZIP support during rollback operations
+        if (defined('WPR_ROLLBACK_ACTIVE') || did_action('wp_ajax_wpr_process_rollback')) {
+            $mimes['zip'] = 'application/zip';
+        }
+        return $mimes;
+    }
+    
+    /**
+     * Filter allowed upload file types for multisite during rollback operations.
+     *
+     * @param string|false $filetypes Space-separated list of allowed file extensions.
+     * @return string|false Modified list of allowed file extensions.
+     */
+    public static function filterUploadFileTypes($filetypes)
+    {
+        if ((defined('WPR_ROLLBACK_ACTIVE') || did_action('wp_ajax_wpr_process_rollback')) && is_super_admin()) {
+            // Ensure zip is in the allowed file types list
+            $allowed = explode(' ', $filetypes ?: '');
+            if (!in_array('zip', $allowed, true)) {
+                $allowed[] = 'zip';
+                return implode(' ', array_filter($allowed));
+            }
+        }
+        return $filetypes;
+    }
+    
+    /**
+     * Filter upload size limit for multisite during rollback operations.
+     *
+     * @param int $size Maximum upload size in bytes.
+     * @return int Modified maximum upload size in bytes.
+     */
+    public static function filterUploadSizeLimit($size): int
+    {
+        if ((defined('WPR_ROLLBACK_ACTIVE') || did_action('wp_ajax_wpr_process_rollback')) && is_super_admin()) {
+            // Set a reasonable limit for plugin/theme rollbacks (100MB)
+            return max($size, 104857600);
+        }
+        return $size;
+    }
+} 

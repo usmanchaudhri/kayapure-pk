@@ -1,0 +1,79 @@
+<?php
+
+/**
+ * This is used to add plugin row meta-links.
+ *
+ * @package WpRollback\PluginSetup
+ */
+
+declare(strict_types=1);
+
+namespace WpRollback\Free\PluginSetup;
+
+use WpRollback\Free\Core\Constants;
+use WpRollback\SharedCore\Core\SharedCore;
+
+/**
+ */
+class PluginMeta
+{
+    /**
+     * Adds a link in the wider column. Typically used to add docs and support plugin row meta-links.
+     *
+     */
+    public static function addPluginRowMeta(array $pluginMeta, string $pluginFile): array
+    {
+        $constants = SharedCore::container()->make(Constants::class);
+        
+        if ($constants->getBasename() !== $pluginFile) {
+            return $pluginMeta;
+        }
+
+        $newMetaLinks = [
+            sprintf(
+                '<a href="%1$s" target="_blank">%2$s</a>',
+                esc_url(
+                    add_query_arg(
+                        [
+                            'utm_source'   => 'free-plugin',
+                            'utm_medium'   => 'plugin-row',
+                            'utm_campaign' => 'documentation',
+                        ],
+                        'https://docs.wprollback.com/'
+                    )
+                ),
+                esc_html__('Documentation', 'wp-rollback')
+            ),
+            sprintf(
+                '<a href="%1$s" target="_blank">%2$s</a>',
+                esc_url(
+                    add_query_arg(
+                        [
+                            'utm_source'   => 'free-plugin',
+                            'utm_medium'   => 'plugin-row',
+                            'utm_campaign' => 'support',
+                        ],
+                        'https://wprollback.com/support/'
+                    )
+                ),
+                esc_html__('Support', 'wp-rollback')
+            ),
+            sprintf(
+                '<a href="%1$s" target="_blank" style="color: #6d28d9; font-weight: bold;">%2$s</a>',
+                esc_url(
+                    add_query_arg(
+                        [
+                            'utm_source'   => 'free-plugin',
+                            'utm_medium'   => 'plugin-row',
+                            'utm_campaign' => 'go-pro',
+                        ],
+                        'https://wprollback.com/pricing/'
+                    )
+                ),
+                esc_html__('Go Pro!', 'wp-rollback')
+            ),
+        ];
+
+        return array_merge($pluginMeta, $newMetaLinks);
+    }
+}

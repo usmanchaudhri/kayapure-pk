@@ -1,0 +1,294 @@
+# Conversions API parameter builder feature for NodeJS
+
+[![npm](https://img.shields.io/npm/v/capi-param-builder-nodejs)](https://www.npmjs.com/package/capi-param-builder-nodejs)
+[![License](https://img.shields.io/badge/license-Facebook%20Platform-blue.svg?style=flat-square)](https://github.com/facebook/capi-param-builder/blob/main/nodejs/LICENSE)
+
+## Introduction
+
+The Conversions API parameter builder SDK is a lightweight tool for improving
+Conversions API parameter retrieval and quality.
+
+[Server-Side Parameter Builder Onboarding Guide](https://developers.facebook.com/docs/marketing-api/conversions-api/parameter-builder-feature-library/server-side-onboarding)
+
+## Quick Start
+
+This is a quick start guide for integrating the parameter builder feature with
+NodeJS. You can also find a demo in the next section.
+
+### Setup
+
+1. Check the latest version from CHANGELOG. Update {version} in below examples.
+
+2. Update in your package.json with the latest version.
+
+```
+ "dependencies": {
+     "capi-param-builder-nodejs": {version}
+   }
+```
+
+3. Run `npm install` in your application. If you don't have an application,
+   check #demo section for a demo application. You should see the
+   capi-param-builder installed under your nodejs folder.
+
+Please check the next section for a local demo.
+
+### Demo
+
+Here is a demo application on your localhost. If you've already familiar with
+the library, feel free to skip this section.
+
+1. Checkout the demo application from ./example
+
+2. Go to the ./example/server.js, run
+
+```
+node server.js
+```
+
+3. Check the terminal, your demo application should be up and running!
+
+4. Visit http://localhost:3000/ for your demo webpage. You will see getFbc and
+   getFbp value printed on the home page.
+
+Following are some further validation:
+
+4.1 Change the URL to http://localhost:3000/fbclid=test.
+
+- The printed getFbc value will change to a string containing the `test`.
+- Verify the browser's cookie section. You should see `_fbc` and `_fbp` exist.
+  And the `_fbc` value contains the `test` string.
+
+  4.2 Then change the URL back to http://localhost:3000 in the same browser.
+
+- The `_fbc` and `_fbp` from cookie and printed in webpage should stay the same
+  as 4.1
+
+## API usage
+
+This section covers how to use the SDK and provide suggestions on the API usage.
+
+1. Install the library as mentioned #Quick Start
+2. Import the class in your file. And construct the ParamBuilder class.
+
+```
+const {ParamBuilder} = require('capi-param-builder');
+
+
+// [Recommended] Option 1: List of ETLD+1 for your website domains.
+// This helps provide suggestions for your cookie saving domain.
+const builder = new ParamBuilder(["example.com", "localhost"]);
+```
+
+Optional constructors:
+
+```
+// Option 2: Resolve customized etld+1 via customized logic
+// Check example DefaultETLDPlus1Resolver.js under example/util folder for demo.
+const etldPlus1Resolver = new DefaultETLDPlus1Resolver();
+const builder = new ParamBuilder(etldPlus1Resolver);
+
+
+// Option 3: Not recommended. Empty input.
+// Not recommended. We will return a best guess on your domain by one level down your input host.
+const builder = new ParamBuilder();
+```
+
+3. [Recommended] Call `processRequestFromContext` to process fbc, fbp,
+   client_ip_address, event_source_url and referrer_url. Pass your framework's
+   request object directly — the SDK extracts host / cookies / query / referer
+   (and the request URL for `event_source_url`) for you, and returns the
+   recommended list of cookies to set. See the
+   [Framework support](#framework-support) section for exactly what to pass for
+   your framework.
+
+```
+const cookiesToSet = builder.processRequestFromContext(req);
+```
+
+**Deprecated:** `processRequest` is still supported but deprecated. It does not
+construct `eventSourceUrl`. Prefer `processRequestFromContext` above.
+
+```
+const cookiesToSet = builder.processRequest(
+   req.headers.host, // host
+   params, // query params
+   requestCookies, // current cookie
+   req.headers.referer, // optional, help enhance the accuracy
+   req.headers['x-forwarded-for'] ?? null, // optional, help select the best client_ip_address
+   req.socket.remoteAddress ?? null // optional, help select the best client_ip_address
+ );
+```
+
+4.  [Recommended] Save the `cookiesToSet` as first-party cookies to keep fbc and
+    fbp consistent across all events. Based on your webserver framework, the
+    save cookie API may vary. Feel free to choose the best fit for your use
+    case.Below is one example excerpted from the demo application.
+
+Recommended: get the list of `cookiesToSet` from API call in step 3.
+
+```
+// Call processRequestFromContext in above step 3.
+// The returned cookiesToSet is the recommended list of cookies to be saved.
+const cookiesToSet = builder.processRequestFromContext(req);
+for (const cookie of cookiesToSet) {
+ responseCookies.push(cookie.name + '=' + cookie.value + '; Max-Age=' + cookie.maxAge + '; Domain=' + cookie.domain + '; Path=/');
+}
+res.setHeader('Set-Cookie', responseCookies);
+```
+
+Optional: call `builder.getCookiesToSet()` to get the list of cookies to be
+saved.
+
+```
+for (const cookie of builder.getCookiesToSet()) {
+  responseCookies.push(cookie.name + '=' + cookie.value + '; Max-Age=' +
+  cookie.maxAge + '; Domain=' + cookie.domain + '; Path=/');
+}
+res.setHeader('Set-Cookie', responseCookies);
+```
+
+5.  Get fbc/fbp, client_ip_address, event_source_url, referrer_url, normalized and hashed PII values
+
+```
+
+
+const fbc = builder.getFbc();
+
+
+```
+
+const fbp = builder.getFbp();
+
+```
+
+
+const client_ip_address = builder.getClientIpAddress();
+
+
+```
+
+const eventSourceUrl = builder.getEventSourceUrl();
+
+```
+
+
+const referrerUrl = builder.getReferrerUrl();
+
+
+```
+
+const email = builder.getNormalizedAndHashedPII('
+John_Smith@gmail.com','email');
+
+```
+
+
+const phone = builder.getNormalizedAndHashedPII('+1 (616) 954-78 88','phone');
+
+
+```
+
+getNormalizedAndHashedPII(piiValue, dataType)
+
+```
+API is to get normalized and hashed (sha256) PII from input piiValue, supported dataType include 'phone', 'email','first_name', 'last_name', 'date_of_birth', 'gender', 'city', 'state',  'zip_code', 'country' and 'external_id'.
+
+
+```
+
+6. Send the parameters back to the Conversions API. `event_source_url` and
+   `referrer_url` are sent at the event level; `fbc`, `fbp`, `client_ip_address`,
+   `em` (email) and `ph` (phone) are sent inside `user_data`:
+
+```
+data=[
+ 'event_name': '...',
+ 'event_time': <your_time>,
+ 'event_source_url': eventSourceUrl, // The value provided in step 5
+ 'referrer_url': referrerUrl, // The value provided in step 5
+ 'user_data': {
+   'fbc': fbc, // The value provided in step 5
+   'fbp': fbp, // The value provided in step 5
+   'client_ip_address': client_ip_address // The value provided in step 5
+   'em': email // The value provided in step 5
+   'ph': phone // The value provided in step 5
+     ...
+ }
+ ...
+]
+```
+
+## Framework support
+
+`builder.processRequestFromContext(req)` accepts a request object directly and
+extracts host / cookies / query / referer for you. It supports out of the box:
+
+- Native `http.IncomingMessage` (and HTTP/2 — falls back to `:authority` when
+  `host` header is absent)
+- Express, Fastify, Koa (`ctx.req`), NestJS
+
+**Frameworks that need a small adjustment:**
+
+- **Hapi** — Hapi exposes the raw request as `request.raw.req`, not
+  `request.raw`. Pass it explicitly:
+  ```js
+  builder.processRequestFromContext(request.raw.req);
+  ```
+
+For any other framework, you can build a `PlainDataObject` directly and pass it
+in, or fall back to the original `processRequest(host, queries, cookies, referer)`
+call.
+
+## URL support
+
+The SDK can extract `event_source_url` and `referrer_url` from the incoming
+HTTP request. These values help improve Conversions API event matching and
+attribution quality.
+
+**Using `processRequestFromContext` (recommended):**
+
+```js
+builder.processRequestFromContext(req);
+
+const eventSourceUrl = builder.getEventSourceUrl();
+const referrerUrl = builder.getReferrerUrl();
+```
+
+**Using `processRequest` (deprecated):**
+
+`processRequest` does not construct `eventSourceUrl` — only `referrerUrl`
+is available via the referer parameter. Use `processRequestFromContext` if you
+need `eventSourceUrl`.
+
+<details>
+<summary>How it works</summary>
+
+- `eventSourceUrl` is constructed from the scheme, host, and request URI
+  of the incoming HTTP request.
+- `referrerUrl` is captured from the `Referer` header before any fbclid
+  extraction, with an SDK version appendix added.
+- Both return `null` when the required information is not available.
+
+</details>
+
+**Send them with your Conversions API payload:**
+
+```js
+const data = {
+    event_name: '...',
+    event_time: Math.floor(Date.now() / 1000),
+    event_source_url: builder.getEventSourceUrl(),
+    referrer_url: builder.getReferrerUrl(),
+    user_data: {
+        fbc: builder.getFbc(),
+        fbp: builder.getFbp(),
+        client_ip_address: builder.getClientIpAddress(),
+    },
+};
+```
+
+## License
+
+The Conversions API parameter builder feature for NodeJS is licensed under the
+LICENSE file in the root directory of this source tree.

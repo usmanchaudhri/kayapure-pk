@@ -1,0 +1,71 @@
+<?php return array(
+    'root' => array(
+        'name' => 'facebookincubator/facebook-for-woocommerce',
+        'pretty_version' => '3.7.8',
+        'version' => '3.7.8.0',
+        'reference' => null,
+        'type' => 'wordpress-plugin',
+        'install_path' => __DIR__ . '/../../',
+        'aliases' => array(),
+        'dev' => false,
+    ),
+    'versions' => array(
+        'composer/installers' => array(
+            'pretty_version' => 'v1.12.0',
+            'version' => '1.12.0.0',
+            'reference' => 'd20a64ed3c94748397ff5973488761b22f6d3f19',
+            'type' => 'composer-plugin',
+            'install_path' => __DIR__ . '/./installers',
+            'aliases' => array(),
+            'dev_requirement' => false,
+        ),
+        'facebook/capi-param-builder-php' => array(
+            'pretty_version' => '1.3.2',
+            'version' => '1.3.2.0',
+            'reference' => 'e9510b8ee9fdb5270e39eaec4676354f6eb7e6e1',
+            'type' => 'library',
+            'install_path' => __DIR__ . '/../facebook/capi-param-builder-php',
+            'aliases' => array(),
+            'dev_requirement' => false,
+        ),
+        'facebookincubator/facebook-for-woocommerce' => array(
+            'pretty_version' => '3.7.8',
+            'version' => '3.7.8.0',
+            'reference' => null,
+            'type' => 'wordpress-plugin',
+            'install_path' => __DIR__ . '/../../',
+            'aliases' => array(),
+            'dev_requirement' => false,
+        ),
+        'roundcube/plugin-installer' => array(
+            'dev_requirement' => false,
+            'replaced' => array(
+                0 => '*',
+            ),
+        ),
+        'shama/baton' => array(
+            'dev_requirement' => false,
+            'replaced' => array(
+                0 => '*',
+            ),
+        ),
+        'woocommerce/action-scheduler-job-framework' => array(
+            'pretty_version' => '2.0.0',
+            'version' => '2.0.0.0',
+            'reference' => 'b0b21b9cc87e476ba7f8817050b39274ea7d6732',
+            'type' => 'library',
+            'install_path' => __DIR__ . '/../woocommerce/action-scheduler-job-framework',
+            'aliases' => array(),
+            'dev_requirement' => false,
+        ),
+        'woocommerce/grow' => array(
+            'pretty_version' => 'dev-compat-checker',
+            'version' => 'dev-compat-checker',
+            'reference' => 'b0a37a0633c8df8c0a64ed89437f0f7490766ccd',
+            'type' => 'library',
+            'install_path' => __DIR__ . '/../woocommerce/grow',
+            'aliases' => array(),
+            'dev_requirement' => false,
+        ),
+    ),
+);

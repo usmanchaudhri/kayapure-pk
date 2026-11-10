@@ -1,0 +1,55 @@
+{
+    "packages": [
+        {
+            "name": "yaycommerce/admin-shell",
+            "version": "v2.6.2",
+            "version_normalized": "2.6.2.0",
+            "source": {
+                "type": "git",
+                "url": "git@github.com:YayCommerce/yaycommerce-plugin-admin-shell.git",
+                "reference": "804c35ad454232d5348672bd251e3e81b3297edc"
+            },
+            "dist": {
+                "type": "zip",
+                "url": "https://api.github.com/repos/YayCommerce/yaycommerce-plugin-admin-shell/zipball/804c35ad454232d5348672bd251e3e81b3297edc",
+                "reference": "804c35ad454232d5348672bd251e3e81b3297edc",
+                "shasum": ""
+            },
+            "require": {
+                "php": ">=7.4"
+            },
+            "require-dev": {
+                "phpunit/phpunit": "^9.0"
+            },
+            "time": "2026-05-11T08:12:50+00:00",
+            "bin": [
+                "bin/yaycommerce-init",
+                "bin/yaycommerce-update",
+                "bin/yaycommerce-prerelease"
+            ],
+            "type": "library",
+            "installation-source": "dist",
+            "autoload": {
+                "psr-4": {
+                    "YayCommerce\\AdminShell\\": "src/"
+                }
+            },
+            "autoload-dev": {
+                "psr-4": {
+                    "YayCommerce\\AdminShell\\Tests\\": "tests/"
+                }
+            },
+            "license": [
+                "GPL-3.0-or-later"
+            ],
+            "description": "Shared admin shell for YayCommerce plugins: top-level menu, Licenses page, Other Plugins, Help, optional license subsystem",
+            "support": {
+                "source": "https://github.com/YayCommerce/yaycommerce-plugin-admin-shell/tree/v2.6.2",
+                "issues": "https://github.com/YayCommerce/yaycommerce-plugin-admin-shell/issues"
+            },
+            "install-path": "../yaycommerce/admin-shell"
+        }
+    ],
+    "dev": false,
+    "dev-package-names": []
+}

@@ -1,0 +1,42 @@
+/**
+ * Copyright (c) Facebook, Inc. and its affiliates. All Rights Reserved
+ *
+ * This source code is licensed under the license found in the
+ * LICENSE file in the root directory of this source tree.
+ */
+
+#facebook-commerce-iframe-enhanced {
+	width: 100%;
+	max-width: 1100px;
+	min-height: calc(100vh - 200px);
+	background: transparent;
+	border: none;
+}
+
+.button:disabled {
+    background-color: #f1f1f1;
+    cursor: not-allowed;
+}
+
+.sync-description {
+    font-size: 12px;
+    color: #666;
+    padding-top: 8px;
+}
+
+/* Detected POS plugins, shown as context under the Enable Offline Events checkbox. */
+.wc-facebook-pos-status {
+    display: block;
+    margin-top: 6px;
+    font-size: 12px;
+    color: #646970;
+}
+
+/* WooCommerce puts the disabled class on the setting's table row, not the cell. */
+tr.disabled .wc-facebook-pos-status {
+    color: #8c8f94;
+}
+
+.woocommerce-embed-page #wpbody-content {
+	padding-bottom: 0;
+}

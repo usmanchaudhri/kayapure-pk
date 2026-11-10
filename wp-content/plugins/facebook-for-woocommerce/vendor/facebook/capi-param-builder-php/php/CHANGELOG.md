@@ -1,0 +1,35 @@
+# Change log
+
+All notable changes to this project will be documented in this file.
+
+## Unreleased
+
+## v1.3.2
+
+- Fixed PHP cookie domain resolution for apex and subdomain hosts under multi-label public suffixes (for example, `example.co.uk` and `www.example.co.uk`), so cookies are scoped to `example.co.uk` instead of the invalid public suffix `co.uk`.
+- Recover client IP addresses from `_fbi` cookies containing repeated appendix values.
+- Reject malformed V2 appendices instead of treating arbitrary eight-character suffixes as valid.
+- Include all SDK classes in the Packagist-facing Composer autoloader.
+
+## v1.3.1
+- Adding support for taking request context as input to the SDK.
+- Adding support to get referrer url and event source url from the SDK.
+
+## v1.2.1
+- Improve the is_new flag with more breakdown on net new and modified new option.
+
+## v1.2.0
+- Added support for client IPv6 address retrival and customer information parameters normalization and hashing.
+
+## v1.1.0
+- Improve appendix to include current SDK version, is_new flag.
+
+## v1.0.2
+- ParamsConfig optimization with duplication check and remove unused leading underscore.
+
+## v1.0.1
+- Bug fix: Add validation check for null queries in referrer URL.
+
+## v1.0.0
+
+- Initial supports `fbc` and `fbp` for Conversion API(CAPI) events.
